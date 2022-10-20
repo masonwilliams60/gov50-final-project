@@ -11,4 +11,4 @@ output:
 
 ## Project thoughts
 
-I am interested in exploring data related to sports. More specifically, sports data with a focus on football analytics or basketball. 
+I am interested in exploring data related to sports. More specifically, as a member of the football team, sports data with a focus on football analytics such as how the NFL evaluates players' testing numbers or what factors play into certain decisions over the course of the game (ex. Data on third down conversion rates that may persuade a coach to punt on third down instead of going for it). 
