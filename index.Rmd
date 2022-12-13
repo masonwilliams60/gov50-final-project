@@ -1,14 +1,117 @@
 ---
 title: "Gov 50 Final Project"
 author: Mason Williams
-description: "My final project"
+description: "Fourth down decision making in the NFL"
 output:
   distill::distill_article:
     self_contained: false
 ---
+## Introduction
+
+Fourth down in football is a risky situation that can produce uncertainty within a coaching staff's decision-making, and can hold implications on the outcome of a game. The New York Times created a "Fourth Down Bot" that factors in both distance to gain and field position to provide coaches with analytics that help a coach decide whether or not to attempt a fourth down conversion. However, the NYT bot is limited to only consider two factors, which raises the question: Are there significant predictors that raise the probability for a fourth down conversion attempt beyond distance to gain and field position? In this project, I explore which conditions in a football game hold the most influence over NFL coaches to attempt a fourth down conversion. I hypothesize that while the NYT bot is correct to prioritize distance to gain and field position, there are other significant variables that persuade a coach's decision, such score differential, team of possession, and game time remaining. 
+
+## Data and Research Design
+
+To investigate this question I am utilizing NFL play-by-play data from 2019. This dataset provides 256 different variables describing the situation of all 45,546 offensive snaps across all NFL teams over the course of the 2019 regular season. For this project, my analyses will cover the  distance to gain, field position, game time remaining, team of possession, and score differential variables on fourth down plays throughout the 2019 NFL regular season. 
+
+```{r}
+library(tidyverse)
+
+fourth_down_plays <- reg_pbp_2019 |>
+dplyr::select(posteam, defteam, yardline_100, ydstogo, down, play_type, score_differential, game_seconds_remaining) %>%
+  filter(down == 4, !(play_type %in% c("no_play", "qb_spike", "qb_kneel"))) %>%
+  mutate(went_for_it = as.numeric(play_type %in% c("pass", "run")),
+         cap_ydstogo = ifelse(ydstogo >= 10, 10, ydstogo))
+
+df_goforit <- expand.grid(yardline_100_from_own_goal = 1:99, ydstogo = 1:10)
+df_goforit <- df_goforit %>%
+  mutate(coaches_should = "punt")
+df_goforit <- df_goforit %>%
+  mutate(
+    coaches_should = ifelse((ydstogo == 1), "Go for it", coaches_should),
+    coaches_should = ifelse((yardline_100_from_own_goal > 28 & ydstogo == 2), "Go for it", coaches_should),
+    coaches_should = ifelse((yardline_100_from_own_goal > 41 & yardline_100_from_own_goal <=80 & ydstogo == 3), "Go for it", coaches_should), 
+    coaches_should = ifelse((yardline_100_from_own_goal > 80 & yardline_100_from_own_goal <=96 & ydstogo == 3), "FG", coaches_should), 
+    coaches_should = ifelse((yardline_100_from_own_goal > 96 & ydstogo == 3), "Go for it", coaches_should),
+    coaches_should = ifelse((yardline_100_from_own_goal > 45 & yardline_100_from_own_goal <=72 & ydstogo == 4), "Go for it", coaches_should),
+    coaches_should = ifelse((yardline_100_from_own_goal > 72 & ydstogo == 4), "FG", coaches_should),
+    coaches_should = ifelse((yardline_100_from_own_goal > 50 & yardline_100_from_own_goal <=68 & ydstogo == 5), "Go for it", coaches_should),
+    coaches_should = ifelse((yardline_100_from_own_goal > 68 & ydstogo == 5), "FG", coaches_should),
+    coaches_should = ifelse((yardline_100_from_own_goal > 53 & yardline_100_from_own_goal <= 67 & ydstogo == 6), "Go for it", coaches_should),
+    coaches_should = ifelse((yardline_100_from_own_goal > 67 & ydstogo == 6), "FG", coaches_should),
+    coaches_should = ifelse((yardline_100_from_own_goal > 59 & yardline_100_from_own_goal <= 65 & ydstogo == 7), "Go for it", coaches_should),
+    coaches_should = ifelse((yardline_100_from_own_goal > 65 & ydstogo == 7), "FG", coaches_should),
+    coaches_should = ifelse((yardline_100_from_own_goal > 59 & yardline_100_from_own_goal <=64 & ydstogo == 8), "Go for it", coaches_should),
+    coaches_should = ifelse((yardline_100_from_own_goal > 64 & ydstogo == 8), "FG", coaches_should),
+    coaches_should = ifelse((yardline_100_from_own_goal > 62 & yardline_100_from_own_goal <=65 & ydstogo == 9), "Go for it", coaches_should),
+    coaches_should = ifelse((yardline_100_from_own_goal > 65 & ydstogo == 9), "FG", coaches_should),
+    coaches_should = ifelse((yardline_100_from_own_goal > 63 & ydstogo == 10), "FG", coaches_should)
+  )
+df_goforit <- df_goforit %>% 
+  filter(yardline_100_from_own_goal + ydstogo <= 100 & yardline_100_from_own_goal + ydstogo >= 10)
+
+fourth_down_plays <- fourth_down_plays %>%
+  mutate(yardline_100_from_own_goal = 100 - as.numeric(yardline_100)) %>%
+  inner_join(df_goforit, by = c("yardline_100_from_own_goal", "cap_ydstogo" = "ydstogo"))
+
+fourth_down_plays %>%
+  group_by(posteam) %>%
+  summarize(number_of_attempts = mean(went_for_it)) %>%
+  ungroup() %>%
+  mutate(posteam = fct_reorder(posteam, number_of_attempts)) %>%
+  ggplot(aes(x = posteam, y = number_of_attempts)) +
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  labs(y = "Proportion of 4th down attempts", 
+       x = "Team", title = "4th down attempt rate by team, 2019")
+  
+fourth_down_plays %>%
+  filter(coaches_should == "Go for it") %>%
+  group_by(posteam) %>%
+  summarize(went_for_it_perc = mean(went_for_it)) %>%
+  ungroup() %>%
+  mutate(posteam = fct_reorder(posteam, went_for_it_perc)) %>%
+  ggplot(aes(x = posteam, y = went_for_it_perc)) +
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  labs(y = "Proportion of 4th down attempts in NYT-recommended spots",
+       x = "Team",
+       title = "4th down attempt rate in NYT-recommended spots by team, 2019")
+fourth_down_plays
 
 
+```
+The first graph above provides my outcome/dependent variable: 4th down attempts. This graph shows the percentage of conversion attempts in every fourth down situation. The second graph shows the proportion that NFL teams attempted a fourth down conversion in accordance with the NYT bot. As shown above, NFL coaches do sometimes act in accordance with the recommendation from the NYT bot, but it is not 100% accordance. Therefore, there are other variables that must play into a coach's decision. 
 
-## Project thoughts
+This research design most closely imitates a cross-sectional design, but instead of taking data from one specific time, this data is over the course of the NFL season. This data specifically is taken in the form of discrete moments of time, and in this case: game plays.
 
-I am interested in exploring data related to sports. More specifically, as a member of the football team, sports data with a focus on football analytics such as how the NFL evaluates players' testing numbers or what factors play into certain decisions over the course of the game (ex. Data on third down conversion rates that may persuade a coach to punt on third down instead of going for it). 
+## Results
+
+
+```{r}
+bivariate.fit.time <- glm(went_for_it~game_seconds_remaining, data=fourth_down_plays, na.action = "na.exclude", family = binomial())
+
+exp(coef(bivariate.fit.time))
+
+ggplot(fourth_down_plays, aes(x=game_seconds_remaining, y=went_for_it)) + geom_point() + stat_smooth(method="glm", method.args=list(family="binomial"), se=FALSE) + labs(y = "Probability of 4th down attempt", x = "Seconds of Game Time Remaining")
+
+bivariate.fit.points <- glm(went_for_it~as.numeric(score_differential), data=fourth_down_plays, na.action="na.exclude", family=binomial())
+
+exp(coef(bivariate.fit.points))
+
+ggplot(fourth_down_plays, aes(x=as.numeric(score_differential), y=went_for_it)) + geom_point() + stat_smooth(method="glm", method.args=list(family="binomial"), se=FALSE) + labs(y = "Probability of 4th Down Attempt", x = "Score Differential")
+
+multivariate.fit <- glm(went_for_it~ydstogo + posteam + game_seconds_remaining + as.numeric(score_differential) + yardline_100_from_own_goal, data=fourth_down_plays, na.action="na.exclude", family=binomial())
+
+tbl_regression(multivariate.fit, exponentiate = TRUE)
+```
+
+The outcome variable of interest is binomial, which means that the data are grouped in two clusters: one for conversion attempts and one for no attempt. Since these clusters are not linear, logistical regression analyses were performed instead. Therefore, the regression coefficients needed to be exponentiated to be interpreted. Exponentiated coefficients are also known as odds ratios. The first plot shows the relationship between game seconds remaining and the proportion of 4th down attempts. The odds ratio is 0.999 or 1.001 as a reciprocal. This means that for every additional second on the game clock, the team of possession is 1.001 times less likely to make a 4th down attempt. Seconds of game play remaining is a significant predictor of 4th down attempts (p<0.001), which means that there is less than a 0.001% likelihood that these results were found by chance. The second plot shows the relationship between the score differential between the two teams and the proportion of 4th down attempts. The odds ratio is 0.941 or 1.06 as a reciprocal. This means for every point that the time of possession has over the defending team, the team of possession is 1.062 times less likely to attempt a 4th down conversion. Score differential is also a signficant predictor of 4th down attempts at the 0.001 level. 
+
+After confirming that there are at least two additional statistically significant predictors for 4th down attempts that are not considered by the NYT Bot, those predictors were combined with the two variables utilized by the bot: yards to gain and field position as well as the identity of the team of possession. The results are summarized in the table above. Statistically significant predictors will be interpreted here. Yards to gain for a 1st down was a significant predictor (p<0.001). The odds ratio was 0.78 or 1.28 as a reciprocal. Therefore, for every additional yard to gain, there is 1.28 times less of a probability of a 4th down attempt, when controlled by the identity of the possessing team, field position, score differential, and game time remaining. Field position was also a significant predictor (p<0.001) and had an odds ratio of 1.02. This teams that for every additional yard that the team is away from their own goal, there is 1.02 times the probability that a 4th doewn attempt will be made. There were two NFL teams that were significant predictors of 4th down attempt: the Baltimore Ravens and the New York Giants. The Baltimore Ravens (BAL) (p<0.01) had an odds ratio of 3.10, which means that this team is 3.10 times more likely to attempt a 4th down conversion when controlling for yards to gain, score differential, field position, and game time remaining. The New York Giants (NYG) (p=0.038) had an odds ratio of 2.27, which means that this team is 2.27 times more likely to attempt a 4th down conversion when controlling for yards to gain, field position, score differential, and game time remaining. As with the corresponding bivariate model, game time remaining remained a significant predictor of 4th down conversion attempts at the 0.001 level with the same odds ratio 0.999 (which was rounded to 1.00 on the table) even when controlling for the other variables in this multivariate model. Similarly, like the corresponding bivariate model, score differential remained a significant predictor of 4th down attempts at the 0.001 level even when controlling for the other predicting variables for this model and had an odds ratio of 0.93 or 1.07. This can be interpreted that for each point the team of possession has over the opposing team, there is 1.07 times less of a probability that a 4th down attempt will be made. Because this most closely simulates a cross-sectional research design and the experiment itself is not randomized, it would not be appropriate to say this is a 100% causal relationship between variables. 
+
+## Conclusion
+
+Through exploring a number of different variables that may impact a coach's decision on fourth down, my hypothesis was correct to consider that there are other variables that play a significant role in this question. The NYT bot only considers field position and distance to gain to give a recommendation. While these two variables have been shown to be significant, it is interesting to observe that there are other key variables (score differential, game time remaining, and team of possession) were also statistically significant. 
+
+One shortcoming of my experiment is that there are unique variables that are not accounted for in this data that could have also have an impact, such as play style or even just a coach’s natural aggressiveness and philosophy. These variables would be difficult to discretely quantify in measure, though, and are therefore not accounted for. As for improvements to the experiment, it would be very beneficial to acquire survey data from NFL coaches that asks what they each actually consider when making a decision on fourth down. 
